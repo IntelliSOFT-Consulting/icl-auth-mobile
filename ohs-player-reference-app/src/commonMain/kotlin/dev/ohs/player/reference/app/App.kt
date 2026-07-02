@@ -58,7 +58,7 @@ fun App() {
 
   CompositionLocalProvider(LocalViewRegistry provides registry) {
     OhsPlayerTheme {
-      var isLoggedIn by rememberSaveable { mutableStateOf(false) }
+      var isLoggedIn by rememberSaveable { mutableStateOf(IclAuth.hasValidAccessToken()) }
 
       if (isLoggedIn) {
         ReferenceAppNavigation()

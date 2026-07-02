@@ -46,10 +46,14 @@ The main public types are:
 
 - `IclAuth`
 - `IclAuthConfig`
+- `AuthSession`
+- `AuthSessionStore`
+- `InMemoryAuthSessionStore`
 - `LoginScreen`
 - `LoginScreenConfig`
 - `LoginMessages`
 - `LoginSuccess`
+- `LoginTokenResponse`
 - `LoginFailure`
 
 ## Add the library
@@ -76,6 +80,8 @@ fun configureAuth() {
   IclAuth.initialize(
     IclAuthConfig(
       baseAuthUrl = "https://auth.example.com",
+      providerProfileEndpoint = "/provider/me",
+      sessionStore = InMemoryAuthSessionStore,
     )
   )
 }
@@ -94,6 +100,8 @@ import dev.ohs.player.auth.IclAuthConfig
 private val AUTH_CONFIG =
   IclAuthConfig(
     baseAuthUrl = "https://auth.example.com",
+    providerProfileEndpoint = "/provider/me",
+    sessionStore = InMemoryAuthSessionStore,
   )
 
 @Composable
@@ -189,6 +197,7 @@ fun LaunchScreen() {
     LoginScreen(
       config = LOGIN_CONFIG,
       onLoginSuccess = {
+        println("Auth header: ${IclAuth.currentAuthorizationHeader()}")
         isLoggedIn = true
       },
       onLoginFailure = { failure ->
@@ -204,6 +213,90 @@ fun LaunchScreen() {
   }
 }
 ```
+
+## Session and token handling
+
+The library can keep the login token response as an auth session for reuse by the rest of your app.
+
+When a login call succeeds and the response contains both `access_token` and `token_type`, `icl-auth` automatically:
+
+- The access token
+- The token type such as `Bearer`
+- The refresh token when available
+- The token issue time
+- The computed access-token expiry time
+- The computed refresh-token expiry time
+- Session metadata such as `scope`, `session_state`, `status`, and `firstLogin`
+- Sends an authenticated `GET` request to the configured provider profile endpoint
+- Stores the parsed provider profile in memory for the current app session
+
+### Read the current session
+
+```kotlin
+val session = IclAuth.currentSession()
+val providerProfile = IclAuth.currentProviderProfile()
+val providerUser = IclAuth.currentProviderUser()
+val authHeader = IclAuth.currentAuthorizationHeader()
+val headers = IclAuth.currentAuthHeaders()
+```
+
+`currentAuthorizationHeader()` only returns a value while the access token is still valid.
+
+Example:
+
+```kotlin
+val authHeader = IclAuth.currentAuthorizationHeader()
+// Result: "Bearer eyJ..."
+```
+
+If the token is expired, the helper returns `null` instead of an invalid header.
+
+### Read the session from login success
+
+The login callback also returns the parsed token response and the computed auth session:
+
+```kotlin
+LoginScreen(
+  config = LOGIN_CONFIG,
+  onLoginSuccess = { result ->
+    val token = result.tokenResponse?.accessToken
+    val authHeader = result.session?.authorizationHeader
+    val providerUser = result.providerProfile?.user
+  },
+)
+```
+
+### Use a custom session store
+
+By default, the library uses `InMemoryAuthSessionStore`, which keeps the token only for the life of the running app process.
+
+If you need to restore auth after app restart, provide your own `AuthSessionStore` implementation:
+
+```kotlin
+class MySessionStore : AuthSessionStore {
+  override var session: AuthSession? = null
+}
+```
+
+Then initialize the library with it:
+
+```kotlin
+IclAuth.initialize(
+  IclAuthConfig(
+    baseAuthUrl = "https://auth.example.com",
+    providerProfileEndpoint = "/provider/me",
+    sessionStore = MySessionStore(),
+  )
+)
+```
+
+### Clear the stored session
+
+```kotlin
+IclAuth.clearSession()
+```
+
+This removes the current auth session but keeps the library configuration intact.
 
 ## How URL resolution works
 
@@ -431,6 +524,7 @@ If this function returns a non-blank string, that message is used first.
 
 - `statusCode`
 - `responseBody`
+- `tokenResponse`
 
 Example:
 
@@ -440,15 +534,28 @@ LoginScreen(
   onLoginSuccess = { success ->
     println(success.statusCode)
     println(success.responseBody)
+    println(success.tokenResponse?.accessToken)
+    println(success.tokenResponse?.refreshToken)
   },
 )
 ```
 
-The library does not currently parse tokens or persist sessions for you.
+The library now parses standard token-style fields such as:
+
+- `access_token`
+- `refresh_token`
+- `expires_in`
+- `refresh_expires_in`
+- `token_type`
+- `session_state`
+- `scope`
+- `firstLogin`
+- `status`
+
+The library still does not persist sessions for you.
 Your app remains responsible for:
 
 - navigation after success
-- token extraction
 - token persistence
 - session management
 
