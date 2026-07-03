@@ -15,7 +15,6 @@
  */
 package dev.ohs.player.auth
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,7 +25,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -40,7 +38,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -54,12 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -68,25 +60,28 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
-internal const val LOGIN_USERNAME_TAG = "login_username"
-internal const val LOGIN_PASSWORD_TAG = "login_password"
-internal const val LOGIN_BUTTON_TAG = "login_button"
+internal const val SET_NEW_PASSWORD_CURRENT_TAG = "set_new_password_current"
+internal const val SET_NEW_PASSWORD_NEW_TAG = "set_new_password_new"
+internal const val SET_NEW_PASSWORD_CONFIRM_TAG = "set_new_password_confirm"
+internal const val SET_NEW_PASSWORD_BUTTON_TAG = "set_new_password_button"
 
 @Composable
-fun LoginScreen(
-  config: LoginScreenConfig,
-  onLoginSuccess: (LoginSuccess) -> Unit,
+fun SetNewPasswordScreen(
+  config: SetNewPasswordScreenConfig,
+  idNumber: String,
+  onPasswordResetSuccess: (SetNewPasswordSuccess) -> Unit,
   modifier: Modifier = Modifier,
-  onLoginFailure: (LoginFailure) -> Unit = {},
-  onForgotPasswordClick: () -> Unit = {},
+  onPasswordResetFailure: (SetNewPasswordFailure) -> Unit = {},
+  onBackToLoginClick: (() -> Unit)? = null,
   onTermsAndConditionsClick: () -> Unit = {},
 ) {
-  var username by rememberSaveable { mutableStateOf("") }
-  var password by rememberSaveable { mutableStateOf("") }
+  var currentPassword by rememberSaveable { mutableStateOf("") }
+  var newPassword by rememberSaveable { mutableStateOf("") }
+  var confirmPassword by rememberSaveable { mutableStateOf("") }
   var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
   var isSubmitting by rememberSaveable { mutableStateOf(false) }
   val coroutineScope = rememberCoroutineScope()
-  val resolvedConfig = resolveLoginConfig(screenConfig = config)
+  val resolvedConfig = resolveSetNewPasswordConfig(screenConfig = config)
   val httpClient =
     remember(resolvedConfig.requestTimeoutMillis) {
       buildLoginHttpClient(resolvedConfig.requestTimeoutMillis)
@@ -95,32 +90,48 @@ fun LoginScreen(
 
   DisposableEffect(httpClient) { onDispose { httpClient.close() } }
 
-  LoginScreenContent(
-    username = username,
-    password = password,
+  SetNewPasswordScreenContent(
+    idNumber = idNumber,
+    currentPassword = currentPassword,
+    newPassword = newPassword,
+    confirmPassword = confirmPassword,
     modifier = modifier,
+    config = config,
     errorMessage = errorMessage,
     isSubmitting = isSubmitting,
-    config = config,
-    onUsernameChange = {
-      username = it
+    onTermsAndConditionsClick = onTermsAndConditionsClick,
+    onCurrentPasswordChange = {
+      currentPassword = it
       errorMessage = null
     },
-    onPasswordChange = {
-      password = it
+    onNewPasswordChange = {
+      newPassword = it
       errorMessage = null
     },
-    onLoginClick = {
+    onConfirmPasswordChange = {
+      confirmPassword = it
+      errorMessage = null
+    },
+    onSubmitClick = {
       if (isSubmitting) {
-        return@LoginScreenContent
+        return@SetNewPasswordScreenContent
       }
 
       val validationFailure =
-        validateLoginRequest(config = resolvedConfig, username = username, password = password)
+        validateSetNewPasswordForm(
+          config = resolvedConfig,
+          request =
+            SetNewPasswordReq(
+              temporaryPassword = currentPassword,
+              idNumber = idNumber,
+              password = newPassword,
+            ),
+          confirmPassword = confirmPassword,
+        )
       if (validationFailure != null) {
         errorMessage = validationFailure.message
-        onLoginFailure(validationFailure)
-        return@LoginScreenContent
+        onPasswordResetFailure(validationFailure)
+        return@SetNewPasswordScreenContent
       }
 
       coroutineScope.launch {
@@ -130,15 +141,24 @@ fun LoginScreen(
         try {
           when (
             val result =
-              loginService.login(config = resolvedConfig, username = username, password = password)
+              loginService.setNewPassword(
+                config = resolvedConfig,
+                request =
+                  SetNewPasswordReq(
+                    temporaryPassword = currentPassword,
+                    idNumber = idNumber,
+                    password = newPassword,
+                  ),
+              )
           ) {
-            is LoginAttemptResult.Success -> {
+            is SetNewPasswordAttemptResult.Success -> {
               errorMessage = null
-              onLoginSuccess(result.value)
+              onPasswordResetSuccess(result.value)
             }
-            is LoginAttemptResult.Failure -> {
+
+            is SetNewPasswordAttemptResult.Failure -> {
               errorMessage = result.value.message
-              onLoginFailure(result.value)
+              onPasswordResetFailure(result.value)
             }
           }
         } finally {
@@ -146,26 +166,32 @@ fun LoginScreen(
         }
       }
     },
-    onForgotPasswordClick = onForgotPasswordClick,
-    onTermsAndConditionsClick = onTermsAndConditionsClick,
+    onBackToLoginClick = onBackToLoginClick,
   )
 }
 
 @Composable
-private fun LoginScreenContent(
-  username: String,
-  password: String,
-  onUsernameChange: (String) -> Unit,
-  onPasswordChange: (String) -> Unit,
-  onLoginClick: () -> Unit,
-  onForgotPasswordClick: () -> Unit,
-  onTermsAndConditionsClick: () -> Unit,
+private fun SetNewPasswordScreenContent(
+  idNumber: String,
+  currentPassword: String,
+  newPassword: String,
+  confirmPassword: String,
+  onCurrentPasswordChange: (String) -> Unit,
+  onNewPasswordChange: (String) -> Unit,
+  onConfirmPasswordChange: (String) -> Unit,
+  onSubmitClick: () -> Unit,
+  config: SetNewPasswordScreenConfig,
   modifier: Modifier = Modifier,
   errorMessage: String? = null,
   isSubmitting: Boolean = false,
-  config: LoginScreenConfig,
+  onBackToLoginClick: (() -> Unit)? = null,
+  onTermsAndConditionsClick: () -> Unit = {},
 ) {
-  val canSubmit = username.isNotBlank() && password.isNotBlank() && !isSubmitting
+  val canSubmit =
+    currentPassword.isNotBlank() &&
+      newPassword.isNotBlank() &&
+      confirmPassword.isNotBlank() &&
+      !isSubmitting
 
   Scaffold(
     modifier = modifier.fillMaxSize(),
@@ -187,7 +213,7 @@ private fun LoginScreenContent(
             Brush.verticalGradient(
               colors =
                 listOf(
-                  MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                  MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f),
                   MaterialTheme.colorScheme.surface,
                 )
             )
@@ -210,19 +236,28 @@ private fun LoginScreenContent(
             AuthLogo()
           }
           Text(
-            text = "Welcome Back",
+            text = "Set a New Password",
             modifier = Modifier.padding(top = if (config.showLogo) 20.dp else 0.dp),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
           )
           Text(
-            text = "Sign in to continue to the ICL reference experience.",
+            text = "This is your first login. Update your password to continue.",
             modifier = Modifier.padding(top = 8.dp),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
           )
+          if (idNumber.isNotBlank()) {
+            Text(
+              text = "ID Number: $idNumber",
+              modifier = Modifier.padding(top = 8.dp),
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              textAlign = TextAlign.Center,
+            )
+          }
         }
 
         Card(
@@ -236,35 +271,49 @@ private fun LoginScreenContent(
             verticalArrangement = Arrangement.spacedBy(16.dp),
           ) {
             OutlinedTextField(
-              value = username,
-              onValueChange = onUsernameChange,
-              modifier = Modifier.fillMaxWidth().testTag(LOGIN_USERNAME_TAG),
-              label = { Text("Username") },
-              placeholder = { Text("Enter your username") },
+              value = currentPassword,
+              onValueChange = onCurrentPasswordChange,
+              modifier = Modifier.fillMaxWidth().testTag(SET_NEW_PASSWORD_CURRENT_TAG),
+              label = { Text("Current password") },
+              placeholder = { Text("Enter your current password") },
               singleLine = true,
               enabled = !isSubmitting,
+              visualTransformation = PasswordVisualTransformation(),
               keyboardOptions =
-                KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Next),
+                KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
             )
 
             OutlinedTextField(
-              value = password,
-              onValueChange = onPasswordChange,
-              modifier = Modifier.fillMaxWidth().testTag(LOGIN_PASSWORD_TAG),
-              label = { Text("Password") },
-              placeholder = { Text("Enter your password") },
+              value = newPassword,
+              onValueChange = onNewPasswordChange,
+              modifier = Modifier.fillMaxWidth().testTag(SET_NEW_PASSWORD_NEW_TAG),
+              label = { Text("New password") },
+              placeholder = { Text("Enter your new password") },
+              singleLine = true,
+              enabled = !isSubmitting,
+              visualTransformation = PasswordVisualTransformation(),
+              keyboardOptions =
+                KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+            )
+
+            OutlinedTextField(
+              value = confirmPassword,
+              onValueChange = onConfirmPasswordChange,
+              modifier = Modifier.fillMaxWidth().testTag(SET_NEW_PASSWORD_CONFIRM_TAG),
+              label = { Text("Confirm password") },
+              placeholder = { Text("Confirm your new password") },
               singleLine = true,
               enabled = !isSubmitting,
               visualTransformation = PasswordVisualTransformation(),
               keyboardOptions =
                 KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-              keyboardActions = KeyboardActions(onDone = { if (canSubmit) onLoginClick() }),
+              keyboardActions = KeyboardActions(onDone = { if (canSubmit) onSubmitClick() }),
             )
 
-            if (config.showForgotPassword) {
+            if (onBackToLoginClick != null) {
               Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onForgotPasswordClick, enabled = !isSubmitting) {
-                  Text("Forgot password?")
+                TextButton(onClick = onBackToLoginClick, enabled = !isSubmitting) {
+                  Text("Back to login")
                 }
               }
             }
@@ -278,12 +327,12 @@ private fun LoginScreenContent(
             }
 
             Button(
-              onClick = onLoginClick,
-              modifier = Modifier.fillMaxWidth().testTag(LOGIN_BUTTON_TAG),
+              onClick = onSubmitClick,
+              modifier = Modifier.fillMaxWidth().testTag(SET_NEW_PASSWORD_BUTTON_TAG),
               enabled = canSubmit,
               shape = RoundedCornerShape(18.dp),
             ) {
-              Text(if (isSubmitting) "Signing in..." else "Log in")
+              Text(if (isSubmitting) "Updating..." else "Update password")
             }
           }
         }
@@ -292,93 +341,15 @@ private fun LoginScreenContent(
   }
 }
 
-@Composable
-internal fun LoginFooter(onTermsAndConditionsClick: () -> Unit, modifier: Modifier = Modifier) {
-  Surface(
-    modifier = modifier,
-    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-    tonalElevation = 4.dp,
-  ) {
-    Column(
-      modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
-      horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-      Text(
-        text = "By continuing, you agree to the platform Terms and Conditions.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center,
-      )
-      TextButton(onClick = onTermsAndConditionsClick) { Text("Terms and Conditions") }
-    }
+private fun validateSetNewPasswordForm(
+  config: ResolvedSetNewPasswordConfig,
+  request: SetNewPasswordReq,
+  confirmPassword: String,
+): SetNewPasswordFailure? =
+  when {
+    confirmPassword.isBlank() ->
+      SetNewPasswordFailure(message = config.messages.emptyConfirmPassword)
+    request.password != confirmPassword ->
+      SetNewPasswordFailure(message = config.messages.passwordMismatch)
+    else -> validateSetNewPasswordRequest(config = config, request = request)
   }
-}
-
-@Composable
-internal fun AuthLogo(modifier: Modifier = Modifier) {
-  val primary = MaterialTheme.colorScheme.primary
-  val secondary = MaterialTheme.colorScheme.secondary
-  val primaryContainer = MaterialTheme.colorScheme.primaryContainer
-  val onPrimary = MaterialTheme.colorScheme.onPrimary
-
-  Surface(
-    modifier = modifier.semantics { contentDescription = "ICL logo" },
-    shape = RoundedCornerShape(28.dp),
-    color = Color.Transparent,
-  ) {
-    Canvas(
-      modifier =
-        Modifier.size(92.dp)
-          .background(
-            color = primaryContainer.copy(alpha = 0.4f),
-            shape = RoundedCornerShape(28.dp),
-          )
-          .padding(14.dp)
-    ) {
-      val width = size.width
-      val height = size.height
-
-      val outerHex =
-        Path().apply {
-          moveTo(width * 0.50f, 0f)
-          lineTo(width * 0.90f, height * 0.22f)
-          lineTo(width * 0.90f, height * 0.78f)
-          lineTo(width * 0.50f, height)
-          lineTo(width * 0.10f, height * 0.78f)
-          lineTo(width * 0.10f, height * 0.22f)
-          close()
-        }
-
-      val innerLeaf =
-        Path().apply {
-          moveTo(width * 0.52f, height * 0.18f)
-          quadraticTo(width * 0.78f, height * 0.34f, width * 0.66f, height * 0.58f)
-          quadraticTo(width * 0.58f, height * 0.74f, width * 0.42f, height * 0.74f)
-          quadraticTo(width * 0.24f, height * 0.74f, width * 0.26f, height * 0.54f)
-          quadraticTo(width * 0.28f, height * 0.32f, width * 0.52f, height * 0.18f)
-          close()
-        }
-
-      val centerPulse =
-        Path().apply {
-          moveTo(width * 0.22f, height * 0.52f)
-          lineTo(width * 0.38f, height * 0.52f)
-          lineTo(width * 0.46f, height * 0.36f)
-          lineTo(width * 0.56f, height * 0.70f)
-          lineTo(width * 0.64f, height * 0.52f)
-          lineTo(width * 0.78f, height * 0.52f)
-          lineTo(width * 0.78f, height * 0.60f)
-          lineTo(width * 0.60f, height * 0.60f)
-          lineTo(width * 0.54f, height * 0.74f)
-          lineTo(width * 0.44f, height * 0.42f)
-          lineTo(width * 0.36f, height * 0.60f)
-          lineTo(width * 0.22f, height * 0.60f)
-          close()
-        }
-
-      drawPath(path = outerHex, color = primary, style = Fill)
-      drawPath(path = innerLeaf, color = secondary, style = Fill)
-      drawPath(path = centerPulse, color = onPrimary, style = Fill)
-    }
-  }
-}

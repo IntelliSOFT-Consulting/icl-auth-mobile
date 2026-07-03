@@ -5,8 +5,10 @@
 It currently provides:
 
 - A configurable `LoginScreen`
+- A configurable `SetNewPasswordScreen` for first-time login flows
 - Shared auth initialization through `IclAuth.initialize(...)`
 - Built-in login API calls
+- Built-in password reset API calls
 - Built-in validation and error handling
 - Per-app and per-screen configuration
 
@@ -55,6 +57,12 @@ The main public types are:
 - `LoginSuccess`
 - `LoginTokenResponse`
 - `LoginFailure`
+- `SetNewPasswordScreen`
+- `SetNewPasswordScreenConfig`
+- `SetNewPasswordMessages`
+- `SetNewPasswordReq`
+- `SetNewPasswordSuccess`
+- `SetNewPasswordFailure`
 
 ## Add the library
 
@@ -166,6 +174,49 @@ private val LOGIN_CONFIG =
 - `responseMessageResolver`
   Optional custom function for mapping response status and body into a message.
 
+## Configure the first-time password screen
+
+Use `SetNewPasswordScreenConfig` for the screen shown when a user logs in with
+`firstLogin = true`.
+
+```kotlin
+import dev.ohs.player.auth.SetNewPasswordScreenConfig
+
+private val SET_NEW_PASSWORD_CONFIG =
+  SetNewPasswordScreenConfig(
+    endpoint = "/provider/reset-password",
+    showLogo = true,
+    showFooter = true,
+  )
+```
+
+### Important fields
+
+- `endpoint`
+  The password reset endpoint.
+  Default: `/provider/reset-password`
+
+- `showLogo`
+  Controls whether the screen shows the built-in auth logo.
+
+- `showFooter`
+  Controls whether the footer and terms section are shown.
+
+- `requestHeaders`
+  Extra headers for this screen only.
+
+- `requestTimeoutMillis`
+  Optional screen-level timeout override.
+
+- `responseMessageKeys`
+  Optional list of JSON keys to inspect for server error messages.
+
+- `messages`
+  Optional screen-level override for user-facing error text.
+
+- `responseMessageResolver`
+  Optional custom function for mapping response status and body into a message.
+
 ## Use the login screen
 
 Render `LoginScreen` and react to success or failure.
@@ -176,6 +227,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import dev.ohs.player.auth.IclAuth
 import dev.ohs.player.auth.LoginScreen
 import dev.ohs.player.auth.LoginScreenConfig
 
@@ -214,6 +266,60 @@ fun LaunchScreen() {
 }
 ```
 
+## Use the first-time password screen
+
+Render `SetNewPasswordScreen` when login succeeds with `firstLogin = true`.
+
+```kotlin
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import dev.ohs.player.auth.IclAuth
+import dev.ohs.player.auth.LoginScreen
+import dev.ohs.player.auth.LoginScreenConfig
+import dev.ohs.player.auth.SetNewPasswordScreen
+import dev.ohs.player.auth.SetNewPasswordScreenConfig
+
+private val LOGIN_CONFIG = LoginScreenConfig(endpoint = "/provider/login")
+private val SET_NEW_PASSWORD_CONFIG = SetNewPasswordScreenConfig()
+
+@Composable
+fun LaunchScreen() {
+  var isLoggedIn by rememberSaveable { mutableStateOf(false) }
+  var firstLoginIdNumber by rememberSaveable { mutableStateOf<String?>(null) }
+
+  when {
+    isLoggedIn -> MainScreen()
+    firstLoginIdNumber != null ->
+      SetNewPasswordScreen(
+        config = SET_NEW_PASSWORD_CONFIG,
+        idNumber = firstLoginIdNumber.orEmpty(),
+        onPasswordResetSuccess = {
+          firstLoginIdNumber = null
+          isLoggedIn = true
+        },
+        onBackToLoginClick = {
+          firstLoginIdNumber = null
+          IclAuth.clearSession()
+        },
+      )
+    else ->
+      LoginScreen(
+        config = LOGIN_CONFIG,
+        onLoginSuccess = { success ->
+          if (success.tokenResponse?.firstLogin == true) {
+            firstLoginIdNumber = success.username
+          } else {
+            isLoggedIn = true
+          }
+        },
+      )
+  }
+}
+```
+
 ## Session and token handling
 
 The library can keep the login token response as an auth session for reuse by the rest of your app.
@@ -229,6 +335,10 @@ When a login call succeeds and the response contains both `access_token` and `to
 - Session metadata such as `scope`, `session_state`, `status`, and `firstLogin`
 - Sends an authenticated `GET` request to the configured provider profile endpoint
 - Stores the parsed provider profile in memory for the current app session
+
+If the login response contains `firstLogin = true`, the library stores the auth
+session but skips the provider profile request so your app can route the user to
+`SetNewPasswordScreen` first.
 
 ### Read the current session
 
@@ -259,6 +369,7 @@ The login callback also returns the parsed token response and the computed auth 
 LoginScreen(
   config = LOGIN_CONFIG,
   onLoginSuccess = { result ->
+    val username = result.username
     val token = result.tokenResponse?.accessToken
     val authHeader = result.session?.authorizationHeader
     val providerUser = result.providerProfile?.user
@@ -344,6 +455,16 @@ By default, the library sends:
 {
   "idNumber": "the-entered-username",
   "password": "the-entered-password"
+}
+```
+
+The first-time password reset request is also sent as JSON.
+
+```json
+{
+  "temporaryPassword": "the-entered-current-password",
+  "idNumber": "the-user-id-number",
+  "password": "the-entered-new-password"
 }
 ```
 
@@ -443,6 +564,11 @@ These are handled before the request is sent:
 - Empty username
 - Empty password
 - Empty username and password
+- Empty current password
+- Empty new password
+- Empty confirm password
+- New password and confirm password mismatch
+- Current password and new password being the same
 
 ### Network failures
 
@@ -458,11 +584,19 @@ By default it checks:
 - `error`
 - `detail`
 
-If no usable message is found:
+If no usable message is found, the library falls back to the configured
+screen-specific messages.
+
+For `LoginScreen`, that means:
 
 - `4xx` returns the configured invalid-credentials message
 - `5xx` returns the configured server-error message
 - anything else returns the configured unexpected-error message
+
+For `SetNewPasswordScreen`, that means:
+
+- `5xx` returns the configured server-error message
+- other unmapped responses return the configured unexpected-error message
 
 ## Customize messages
 
@@ -496,6 +630,21 @@ val loginConfig =
   )
 ```
 
+Password reset messages can also be customized per screen:
+
+```kotlin
+val setNewPasswordConfig =
+  SetNewPasswordScreenConfig(
+    messages =
+      SetNewPasswordMessages(
+        emptyTemporaryPassword = "Current password is required.",
+        emptyPassword = "New password is required.",
+        emptyConfirmPassword = "Please confirm your new password.",
+        passwordMismatch = "The new passwords do not match.",
+      ),
+  )
+```
+
 ## Custom response message mapping
 
 If your backend uses a special error format, use `responseMessageResolver`.
@@ -524,7 +673,10 @@ If this function returns a non-blank string, that message is used first.
 
 - `statusCode`
 - `responseBody`
+- `username`
 - `tokenResponse`
+- `session`
+- `providerProfile`
 
 Example:
 
@@ -534,11 +686,23 @@ LoginScreen(
   onLoginSuccess = { success ->
     println(success.statusCode)
     println(success.responseBody)
+    println(success.username)
     println(success.tokenResponse?.accessToken)
     println(success.tokenResponse?.refreshToken)
+    println(success.session?.authorizationHeader)
+    println(success.providerProfile?.user?.idNumber)
   },
 )
 ```
+
+`LoginSuccess` includes:
+
+- `statusCode`
+- `responseBody`
+- `username`
+- `tokenResponse`
+- `session`
+- `providerProfile`
 
 The library now parses standard token-style fields such as:
 
@@ -558,6 +722,26 @@ Your app remains responsible for:
 - navigation after success
 - token persistence
 - session management
+
+### Password reset success
+
+`onPasswordResetSuccess` returns:
+
+- `statusCode`
+- `responseBody`
+
+Example:
+
+```kotlin
+SetNewPasswordScreen(
+  config = SetNewPasswordScreenConfig(),
+  idNumber = "32645167",
+  onPasswordResetSuccess = { success ->
+    println(success.statusCode)
+    println(success.responseBody)
+  },
+)
+```
 
 ### Failure
 
@@ -581,12 +765,33 @@ LoginScreen(
 )
 ```
 
+`onPasswordResetFailure` returns:
+
+- `message`
+- `statusCode` when available
+- `responseBody` when available
+
+Example:
+
+```kotlin
+SetNewPasswordScreen(
+  config = SetNewPasswordScreenConfig(),
+  idNumber = "32645167",
+  onPasswordResetSuccess = { },
+  onPasswordResetFailure = { failure ->
+    println(failure.message)
+    println(failure.statusCode)
+    println(failure.responseBody)
+  },
+)
+```
+
 ## Headers
 
 The library merges headers in this order:
 
 1. Global headers from `IclAuthConfig.defaultRequestHeaders`
-2. Screen headers from `LoginScreenConfig.requestHeaders`
+2. Screen headers from `LoginScreenConfig.requestHeaders` or `SetNewPasswordScreenConfig.requestHeaders`
 
 If the same key exists in both, the screen value wins.
 
@@ -622,28 +827,49 @@ private val LOGIN_CONFIG =
     showForgotPassword = true,
   )
 
+private val SET_NEW_PASSWORD_CONFIG = SetNewPasswordScreenConfig()
+
 @Composable
 fun App() {
   remember(AUTH_CONFIG) { IclAuth.initialize(AUTH_CONFIG) }
 
   var isLoggedIn by rememberSaveable { mutableStateOf(false) }
+  var firstLoginIdNumber by rememberSaveable { mutableStateOf<String?>(null) }
 
-  if (isLoggedIn) {
-    MainScreen()
-  } else {
-    LoginScreen(
-      config = LOGIN_CONFIG,
-      onLoginSuccess = { isLoggedIn = true },
-      onForgotPasswordClick = {},
-      onTermsAndConditionsClick = {},
-    )
+  when {
+    isLoggedIn -> MainScreen()
+    firstLoginIdNumber != null ->
+      SetNewPasswordScreen(
+        config = SET_NEW_PASSWORD_CONFIG,
+        idNumber = firstLoginIdNumber.orEmpty(),
+        onPasswordResetSuccess = {
+          firstLoginIdNumber = null
+          isLoggedIn = true
+        },
+      )
+    else ->
+      LoginScreen(
+        config = LOGIN_CONFIG,
+        onLoginSuccess = { success ->
+          if (success.tokenResponse?.firstLogin == true) {
+            firstLoginIdNumber = success.username
+          } else {
+            isLoggedIn = true
+          }
+        },
+        onForgotPasswordClick = {},
+        onTermsAndConditionsClick = {},
+      )
   }
 }
 ```
 
 ## Current scope
 
-At the moment, `icl-auth` exposes the login screen flow.
+At the moment, `icl-auth` exposes:
+
+- the login screen flow
+- the first-time password reset flow
 
 The same pattern can be reused for future auth components:
 
@@ -697,3 +923,4 @@ The current implementation lives in:
 - [`LoginModels.kt`](./src/libraryCommonMain/kotlin/dev/ohs/player/auth/LoginModels.kt)
 - [`LoginClient.kt`](./src/libraryCommonMain/kotlin/dev/ohs/player/auth/LoginClient.kt)
 - [`LoginScreen.kt`](./src/libraryCommonMain/kotlin/dev/ohs/player/auth/LoginScreen.kt)
+- [`SetNewPasswordScreen.kt`](./src/libraryCommonMain/kotlin/dev/ohs/player/auth/SetNewPasswordScreen.kt)

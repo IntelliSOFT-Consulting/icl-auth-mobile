@@ -55,6 +55,36 @@ data class LoginScreenConfig(
   val responseMessageResolver: ((statusCode: Int, responseBody: String) -> String?)? = null,
 )
 
+data class SetNewPasswordMessages(
+  val missingResetPasswordUrl: String = "Configure the reset password URL to continue.",
+  val missingIdNumber: String = "Unable to determine which account to update.",
+  val emptyTemporaryPassword: String = "Enter your current password to continue.",
+  val emptyPassword: String = "Enter your new password to continue.",
+  val emptyConfirmPassword: String = "Confirm your new password to continue.",
+  val passwordMismatch: String = "New password and confirm password must match.",
+  val samePassword: String = "Choose a new password that is different from the current one.",
+  val networkError: String = "Unable to reach the password reset service. Please try again.",
+  val serverError: String = "Unable to update your password right now. Please try again.",
+  val unexpectedError: String = "Something went wrong. Please try again.",
+)
+
+data class SetNewPasswordScreenConfig(
+  val endpoint: String = "/provider/reset-password",
+  val showLogo: Boolean = true,
+  val showFooter: Boolean = true,
+  val requestHeaders: Map<String, String> = emptyMap(),
+  val requestTimeoutMillis: Long? = null,
+  val responseMessageKeys: List<String>? = null,
+  val messages: SetNewPasswordMessages? = null,
+  val responseMessageResolver: ((statusCode: Int, responseBody: String) -> String?)? = null,
+)
+
+data class SetNewPasswordReq(
+  val temporaryPassword: String,
+  val idNumber: String,
+  val password: String,
+)
+
 data class LoginTokenResponse(
   val accessToken: String? = null,
   val expiresIn: Long? = null,
@@ -137,12 +167,21 @@ data class AuthSession(
 data class LoginSuccess(
   val statusCode: Int,
   val responseBody: String,
+  val username: String? = null,
   val tokenResponse: LoginTokenResponse? = null,
   val session: AuthSession? = null,
   val providerProfile: ProviderProfile? = null,
 )
 
 data class LoginFailure(
+  val message: String,
+  val statusCode: Int? = null,
+  val responseBody: String? = null,
+)
+
+data class SetNewPasswordSuccess(val statusCode: Int, val responseBody: String)
+
+data class SetNewPasswordFailure(
   val message: String,
   val statusCode: Int? = null,
   val responseBody: String? = null,

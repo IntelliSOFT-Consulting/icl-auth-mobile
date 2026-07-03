@@ -141,6 +141,63 @@ class LoginClientTest {
   }
 
   @Test
+  fun login_skipsProviderProfileFetchForFirstTimeUsers() = runTest {
+    IclAuth.clear()
+    val sessionStore = InMemoryAuthSessionStore.also { it.session = null }
+    val config =
+      resolveLoginConfig(
+        screenConfig = LoginScreenConfig(endpoint = "/login"),
+        authConfig =
+          IclAuthConfig(baseAuthUrl = "https://auth.example.com", sessionStore = sessionStore),
+      )
+    var providerProfileRequested = false
+    val client =
+      HttpClient(
+        MockEngine { request ->
+          when {
+            request.method == HttpMethod.Post && request.url.encodedPath == "/login" ->
+              respond(
+                content =
+                  """{"access_token":"abc123","refresh_token":"refresh123","expires_in":15552000,"refresh_expires_in":72000,"token_type":"Bearer","session_state":"session-1","scope":"email organization profile openid","firstLogin":true,"status":"success"}""",
+                status = HttpStatusCode.OK,
+                headers =
+                  headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
+              )
+
+            request.method == HttpMethod.Get && request.url.encodedPath == "/provider/me" -> {
+              providerProfileRequested = true
+              respond(
+                content = """{"message":"should not be called"}""",
+                status = HttpStatusCode.InternalServerError,
+                headers =
+                  headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
+              )
+            }
+
+            else -> error("Unexpected request: ${request.method.value} ${request.url}")
+          }
+        }
+      ) {
+        expectSuccess = false
+      }
+    val service = LoginService(client)
+
+    try {
+      val result = service.login(config = config, username = "32645167", password = "secret")
+
+      val success = assertIs<LoginAttemptResult.Success>(result)
+      assertEquals("32645167", success.value.username)
+      assertEquals(true, success.value.tokenResponse?.firstLogin)
+      assertNull(success.value.providerProfile)
+      assertEquals("Bearer abc123", sessionStore.session?.authorizationHeader)
+      assertNull(IclAuth.currentProviderProfile())
+      assertEquals(false, providerProfileRequested)
+    } finally {
+      client.close()
+    }
+  }
+
+  @Test
   fun parseLoginTokenResponse_extractsKnownTokenFields() {
     val tokenResponse =
       parseLoginTokenResponse(

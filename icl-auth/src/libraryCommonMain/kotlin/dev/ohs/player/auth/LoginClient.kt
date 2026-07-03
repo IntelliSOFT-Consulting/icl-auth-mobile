@@ -53,10 +53,25 @@ internal data class ResolvedLoginConfig(
   val sessionStore: AuthSessionStore?,
 )
 
+internal data class ResolvedSetNewPasswordConfig(
+  val resetPasswordUrl: String?,
+  val requestHeaders: Map<String, String>,
+  val requestTimeoutMillis: Long,
+  val responseMessageKeys: List<String>,
+  val messages: SetNewPasswordMessages,
+  val responseMessageResolver: ((statusCode: Int, responseBody: String) -> String?)?,
+)
+
 internal sealed interface LoginAttemptResult {
   data class Success(val value: LoginSuccess) : LoginAttemptResult
 
   data class Failure(val value: LoginFailure) : LoginAttemptResult
+}
+
+internal sealed interface SetNewPasswordAttemptResult {
+  data class Success(val value: SetNewPasswordSuccess) : SetNewPasswordAttemptResult
+
+  data class Failure(val value: SetNewPasswordFailure) : SetNewPasswordAttemptResult
 }
 
 internal sealed interface ProviderProfileRequestResult {
@@ -94,6 +109,21 @@ internal class LoginService(val httpClient: HttpClient) {
       val session = tokenResponse?.toAuthSession(issuedAt = Clock.System.now())
 
       if (response.status.isSuccess()) {
+        if (tokenResponse?.firstLogin == true) {
+          IclAuth.updateSession(session = session, sessionStore = config.sessionStore)
+          IclAuth.updateProviderProfile(null)
+          return LoginAttemptResult.Success(
+            LoginSuccess(
+              statusCode = response.status.value,
+              responseBody = responseBody,
+              username = username,
+              tokenResponse = tokenResponse,
+              session = session,
+              providerProfile = null,
+            )
+          )
+        }
+
         val providerProfileResult = fetchProviderProfile(config = config, session = session)
         if (providerProfileResult is ProviderProfileRequestResult.Failure) {
           IclAuth.updateSession(session = null, sessionStore = config.sessionStore)
@@ -109,6 +139,7 @@ internal class LoginService(val httpClient: HttpClient) {
           LoginSuccess(
             statusCode = response.status.value,
             responseBody = responseBody,
+            username = username,
             tokenResponse = tokenResponse,
             session = session,
             providerProfile = providerProfile,
@@ -134,6 +165,60 @@ internal class LoginService(val httpClient: HttpClient) {
       }
 
       LoginAttemptResult.Failure(LoginFailure(message = config.messages.networkError))
+    }
+  }
+
+  suspend fun setNewPassword(
+    config: ResolvedSetNewPasswordConfig,
+    request: SetNewPasswordReq,
+  ): SetNewPasswordAttemptResult {
+    val validationFailure = validateSetNewPasswordRequest(config = config, request = request)
+    if (validationFailure != null) {
+      return SetNewPasswordAttemptResult.Failure(validationFailure)
+    }
+
+    val resetPasswordUrl =
+      config.resetPasswordUrl
+        ?: return SetNewPasswordAttemptResult.Failure(
+          SetNewPasswordFailure(message = config.messages.missingResetPasswordUrl)
+        )
+
+    return try {
+      val response =
+        httpClient.post(resetPasswordUrl) {
+          header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+          accept(ContentType.Application.Json)
+          config.requestHeaders.forEach { (name, value) -> header(name, value) }
+          setBody(buildSetNewPasswordRequestBody(request))
+        }
+      val responseBody = response.bodyAsText()
+
+      if (response.status.isSuccess()) {
+        SetNewPasswordAttemptResult.Success(
+          SetNewPasswordSuccess(statusCode = response.status.value, responseBody = responseBody)
+        )
+      } else {
+        SetNewPasswordAttemptResult.Failure(
+          SetNewPasswordFailure(
+            message =
+              resolveSetNewPasswordFailureMessage(
+                config = config,
+                statusCode = response.status.value,
+                responseBody = responseBody,
+              ),
+            statusCode = response.status.value,
+            responseBody = responseBody,
+          )
+        )
+      }
+    } catch (error: Throwable) {
+      if (error is CancellationException) {
+        throw error
+      }
+
+      SetNewPasswordAttemptResult.Failure(
+        SetNewPasswordFailure(message = config.messages.networkError)
+      )
     }
   }
 }
@@ -229,6 +314,32 @@ internal fun buildLoginRequestBody(
   return Json.encodeToString(JsonObject.serializer(), payload)
 }
 
+internal fun validateSetNewPasswordRequest(
+  config: ResolvedSetNewPasswordConfig,
+  request: SetNewPasswordReq,
+): SetNewPasswordFailure? =
+  when {
+    config.resetPasswordUrl.isNullOrBlank() ->
+      SetNewPasswordFailure(message = config.messages.missingResetPasswordUrl)
+    request.idNumber.isBlank() -> SetNewPasswordFailure(message = config.messages.missingIdNumber)
+    request.temporaryPassword.isBlank() ->
+      SetNewPasswordFailure(message = config.messages.emptyTemporaryPassword)
+    request.password.isBlank() -> SetNewPasswordFailure(message = config.messages.emptyPassword)
+    request.temporaryPassword == request.password ->
+      SetNewPasswordFailure(message = config.messages.samePassword)
+    else -> null
+  }
+
+internal fun buildSetNewPasswordRequestBody(request: SetNewPasswordReq): String {
+  val payload = buildJsonObject {
+    put("temporaryPassword", JsonPrimitive(request.temporaryPassword))
+    put("idNumber", JsonPrimitive(request.idNumber))
+    put("password", JsonPrimitive(request.password))
+  }
+
+  return Json.encodeToString(JsonObject.serializer(), payload)
+}
+
 internal fun resolveFailureMessage(
   config: ResolvedLoginConfig,
   statusCode: Int,
@@ -238,6 +349,19 @@ internal fun resolveFailureMessage(
     ?: extractResponseMessage(responseBody = responseBody, keys = config.responseMessageKeys)
     ?: when {
       statusCode in 400..499 -> config.messages.invalidCredentials
+      statusCode >= 500 -> config.messages.serverError
+      else -> config.messages.unexpectedError
+    }
+
+internal fun resolveSetNewPasswordFailureMessage(
+  config: ResolvedSetNewPasswordConfig,
+  statusCode: Int,
+  responseBody: String,
+): String =
+  config.responseMessageResolver?.invoke(statusCode, responseBody)?.takeIf(String::isNotBlank)
+    ?: extractResponseMessage(responseBody = responseBody, keys = config.responseMessageKeys)
+    ?: when {
+      statusCode in 400..499 -> config.messages.unexpectedError
       statusCode >= 500 -> config.messages.serverError
       else -> config.messages.unexpectedError
     }
@@ -385,6 +509,24 @@ internal fun resolveLoginConfig(
     messages = screenConfig.messages ?: authConfig?.messages ?: LoginMessages(),
     responseMessageResolver = screenConfig.responseMessageResolver,
     sessionStore = authConfig?.sessionStore,
+  )
+
+internal fun resolveSetNewPasswordConfig(
+  screenConfig: SetNewPasswordScreenConfig,
+  authConfig: IclAuthConfig? = IclAuth.currentConfiguration(),
+): ResolvedSetNewPasswordConfig =
+  ResolvedSetNewPasswordConfig(
+    resetPasswordUrl =
+      resolveAuthUrl(baseAuthUrl = authConfig?.baseAuthUrl, endpoint = screenConfig.endpoint),
+    requestHeaders = authConfig?.defaultRequestHeaders.orEmpty() + screenConfig.requestHeaders,
+    requestTimeoutMillis =
+      screenConfig.requestTimeoutMillis ?: authConfig?.requestTimeoutMillis ?: 15_000,
+    responseMessageKeys =
+      screenConfig.responseMessageKeys
+        ?: authConfig?.responseMessageKeys
+        ?: listOf("message", "error", "detail"),
+    messages = screenConfig.messages ?: SetNewPasswordMessages(),
+    responseMessageResolver = screenConfig.responseMessageResolver,
   )
 
 internal fun resolveAuthUrl(baseAuthUrl: String?, endpoint: String): String? {
