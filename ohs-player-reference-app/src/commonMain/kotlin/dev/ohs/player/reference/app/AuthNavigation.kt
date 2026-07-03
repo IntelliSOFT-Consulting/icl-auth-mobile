@@ -27,17 +27,20 @@ import dev.ohs.player.auth.ForgotPasswordScreenConfig
 import dev.ohs.player.auth.IclAuth
 import dev.ohs.player.auth.LoginScreen
 import dev.ohs.player.auth.LoginScreenConfig
+import dev.ohs.player.auth.ResetPasswordScreen
+import dev.ohs.player.auth.ResetPasswordScreenConfig
 import dev.ohs.player.auth.SetNewPasswordScreen
 import dev.ohs.player.auth.SetNewPasswordScreenConfig
 import dev.ohs.player.reference.app.feature.web.WebContentScreen
 
 private const val AUTH_LOGIN_ROUTE = "auth/login"
 private const val AUTH_FORGOT_PASSWORD_ROUTE = "auth/forgot-password"
+private const val AUTH_SET_NEW_PASSWORD_ROUTE = "auth/set-new-password"
 private const val AUTH_RESET_PASSWORD_ROUTE = "auth/reset-password"
 private const val AUTH_WEB_CONTENT_ROUTE = "auth/web-content"
 private const val FORGOT_PASSWORD_IDENTIFIER_ARG = "identifier"
-private const val RESET_PASSWORD_ID_NUMBER_ARG = "idNumber"
-private const val RESET_PASSWORD_FROM_FORGOT_PASSWORD_ARG = "fromForgotPassword"
+private const val SET_NEW_PASSWORD_ID_NUMBER_ARG = "idNumber"
+private const val RESET_PASSWORD_IDENTIFIER_ARG = "identifier"
 private const val WEB_LINK_KEY_ARG = "linkKey"
 
 private data class AppWebLink(val key: String, val title: String, val url: String)
@@ -68,6 +71,7 @@ private val LOGIN_SCREEN_CONFIG =
 private val FORGOT_PASSWORD_SCREEN_CONFIG = ForgotPasswordScreenConfig()
 
 private val SET_NEW_PASSWORD_SCREEN_CONFIG = SetNewPasswordScreenConfig(showFooter = true)
+private val RESET_PASSWORD_SCREEN_CONFIG = ResetPasswordScreenConfig(showFooter = true)
 
 private val AUTH_WEB_LINKS =
   AuthWebLinksConfig(
@@ -96,11 +100,10 @@ fun AuthNavigation(onAuthenticated: () -> Unit) {
         config = LOGIN_SCREEN_CONFIG,
         onLoginSuccess = { success ->
           if (success.tokenResponse?.firstLogin == true) {
-            navController.navigateToResetPassword(
+            navController.navigateToSetNewPassword(
               initialIdNumber =
                 success.providerProfile?.user?.idNumber?.takeIf(String::isNotBlank)
-                  ?: success.username.orEmpty(),
-              isForgotPasswordFlow = false,
+                  ?: success.username.orEmpty()
             )
           } else {
             onAuthenticated()
@@ -139,10 +142,7 @@ fun AuthNavigation(onAuthenticated: () -> Unit) {
           Result.success(Unit)
         },
         onIAlreadyHaveCodeClick = { identifier ->
-          navController.navigateToResetPassword(
-            initialIdNumber = identifier,
-            isForgotPasswordFlow = true,
-          )
+          navController.navigateToResetPassword(identifier = identifier)
         },
         onBackToLoginClick = { navController.popBackStack() },
       )
@@ -150,35 +150,24 @@ fun AuthNavigation(onAuthenticated: () -> Unit) {
 
     composable(
       route =
-        "$AUTH_RESET_PASSWORD_ROUTE?$RESET_PASSWORD_ID_NUMBER_ARG={$RESET_PASSWORD_ID_NUMBER_ARG}&$RESET_PASSWORD_FROM_FORGOT_PASSWORD_ARG={$RESET_PASSWORD_FROM_FORGOT_PASSWORD_ARG}",
+        "$AUTH_SET_NEW_PASSWORD_ROUTE?$SET_NEW_PASSWORD_ID_NUMBER_ARG={$SET_NEW_PASSWORD_ID_NUMBER_ARG}",
       arguments =
         listOf(
-          navArgument(RESET_PASSWORD_ID_NUMBER_ARG) {
+          navArgument(SET_NEW_PASSWORD_ID_NUMBER_ARG) {
             type = NavType.StringType
             defaultValue = ""
-          },
-          navArgument(RESET_PASSWORD_FROM_FORGOT_PASSWORD_ARG) {
-            type = NavType.BoolType
-            defaultValue = true
-          },
+          }
         ),
     ) { backStackEntry ->
       val initialIdNumber =
-        backStackEntry.arguments?.read { getString(RESET_PASSWORD_ID_NUMBER_ARG) }.orEmpty()
-      val isForgotPasswordFlow =
-        backStackEntry.arguments?.read { getBoolean(RESET_PASSWORD_FROM_FORGOT_PASSWORD_ARG) }
-          ?: true
+        backStackEntry.arguments?.read { getString(SET_NEW_PASSWORD_ID_NUMBER_ARG) }.orEmpty()
 
       SetNewPasswordScreen(
         config = SET_NEW_PASSWORD_SCREEN_CONFIG,
         initialIdNumber = initialIdNumber,
         onPasswordResetSuccess = {
           IclAuth.clearSession()
-          if (isForgotPasswordFlow) {
-            navController.popBackStack(AUTH_LOGIN_ROUTE, inclusive = false)
-          } else {
-            onAuthenticated()
-          }
+          onAuthenticated()
         },
         onBackToLoginClick = {
           IclAuth.clearSession()
@@ -189,6 +178,37 @@ fun AuthNavigation(onAuthenticated: () -> Unit) {
         },
         onPrivacyPolicyClick =
           AUTH_WEB_LINKS.privacyPolicy?.let { link -> { navController.navigateToWebLink(link) } },
+      )
+    }
+
+    composable(
+      route =
+        "$AUTH_RESET_PASSWORD_ROUTE?$RESET_PASSWORD_IDENTIFIER_ARG={$RESET_PASSWORD_IDENTIFIER_ARG}",
+      arguments =
+        listOf(
+          navArgument(RESET_PASSWORD_IDENTIFIER_ARG) {
+            type = NavType.StringType
+            defaultValue = ""
+          }
+        ),
+    ) { backStackEntry ->
+      val identifier =
+        backStackEntry.arguments?.read { getString(RESET_PASSWORD_IDENTIFIER_ARG) }.orEmpty()
+
+      ResetPasswordScreen(
+        config = RESET_PASSWORD_SCREEN_CONFIG,
+        identifier = identifier,
+        onPasswordResetSuccess = {
+          IclAuth.clearSession()
+          navController.popBackStack(AUTH_LOGIN_ROUTE, inclusive = false)
+        },
+        onBackToLoginClick = {
+          IclAuth.clearSession()
+          navController.popBackStack(AUTH_LOGIN_ROUTE, inclusive = false)
+        },
+        onTermsAndConditionsClick = {
+          navController.navigateToWebLink(AUTH_WEB_LINKS.termsAndConditions)
+        },
       )
     }
 
@@ -214,13 +234,14 @@ fun AuthNavigation(onAuthenticated: () -> Unit) {
   }
 }
 
-private fun androidx.navigation.NavController.navigateToResetPassword(
-  initialIdNumber: String,
-  isForgotPasswordFlow: Boolean,
-) {
+private fun androidx.navigation.NavController.navigateToSetNewPassword(initialIdNumber: String) {
   navigate(
-    "$AUTH_RESET_PASSWORD_ROUTE?$RESET_PASSWORD_ID_NUMBER_ARG=${initialIdNumber.trim()}&$RESET_PASSWORD_FROM_FORGOT_PASSWORD_ARG=$isForgotPasswordFlow"
+    "$AUTH_SET_NEW_PASSWORD_ROUTE?$SET_NEW_PASSWORD_ID_NUMBER_ARG=${initialIdNumber.trim()}"
   )
+}
+
+private fun androidx.navigation.NavController.navigateToResetPassword(identifier: String) {
+  navigate("$AUTH_RESET_PASSWORD_ROUTE?$RESET_PASSWORD_IDENTIFIER_ARG=${identifier.trim()}")
 }
 
 private fun androidx.navigation.NavController.navigateToForgotPassword(initialIdentifier: String) {
