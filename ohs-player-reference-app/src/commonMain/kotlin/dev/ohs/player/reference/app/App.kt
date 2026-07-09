@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package dev.ohs.player.reference.app
 
 import androidx.compose.runtime.Composable
@@ -28,6 +29,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.savedstate.read
+import dev.ohs.player.auth.IclAuth
+import dev.ohs.player.auth.IclAuthConfig
+import dev.ohs.player.auth.profile.ProfileRoute
 import dev.ohs.player.library.registry.LocalViewRegistry
 import dev.ohs.player.reference.app.feature.group.list.GroupListScreen
 import dev.ohs.player.reference.app.feature.group.profile.GroupProfileScreen
@@ -35,63 +39,165 @@ import dev.ohs.player.reference.app.feature.patient.profile.PatientProfileScreen
 import icl.ohs.libs.auth.IclAuth
 import icl.ohs.libs.auth.IclAuthConfig
 
+private const val PROFILE_ROUTE = "profile"
 private const val GROUP_LIST_ROUTE = "groupList"
 private const val GROUP_PROFILE_ROUTE = "groupProfile"
 private const val PATIENT_PROFILE_ROUTE = "patientProfile"
+
 private const val GROUP_ID_ARG = "groupId"
 private const val PATIENT_ID_ARG = "patientId"
+
 private val AUTH_CONFIG =
-  IclAuthConfig(baseAuthUrl = "https://dsrkeycloak.intellisoftkenya.com/auth")
+    IclAuthConfig(
+        baseAuthUrl = "https://dsrkeycloak.intellisoftkenya.com/auth"
+    )
 
 @Composable
 fun App() {
-  remember(AUTH_CONFIG) { IclAuth.initialize(AUTH_CONFIG) }
-  val registry = remember { buildAppViewRegistry() }
 
-  CompositionLocalProvider(LocalViewRegistry provides registry) {
-    OhsPlayerTheme {
-      var isLoggedIn by rememberSaveable { mutableStateOf(IclAuth.hasValidAccessToken()) }
-
-      if (isLoggedIn) {
-        ReferenceAppNavigation()
-      } else {
-        AuthNavigation(onAuthenticated = { isLoggedIn = true })
-      }
+    remember(AUTH_CONFIG) {
+        IclAuth.initialize(AUTH_CONFIG)
     }
-  }
+
+    val registry = remember {
+        buildAppViewRegistry()
+    }
+
+    CompositionLocalProvider(
+        LocalViewRegistry provides registry
+    ) {
+
+        OhsPlayerTheme {
+
+            var isLoggedIn by rememberSaveable {
+                mutableStateOf(IclAuth.hasValidAccessToken())
+            }
+
+            if (isLoggedIn) {
+                ReferenceAppNavigation()
+            } else {
+                AuthNavigation(
+                    onAuthenticated = {
+                        isLoggedIn = true
+                    }
+                )
+            }
+        }
+    }
 }
 
 @Composable
 private fun ReferenceAppNavigation() {
-  val navController = rememberNavController()
 
-  NavHost(navController = navController, startDestination = GROUP_LIST_ROUTE) {
+    val navController = rememberNavController()
 
-    // Screen 1: Household list
-    composable(GROUP_LIST_ROUTE) {
-      GroupListScreen(onGroupClick = { id -> navController.navigate("$GROUP_PROFILE_ROUTE/$id") })
+    NavHost(
+        navController = navController,
+
+        // During development we start with the Profile screen.
+        // Later this can be changed to GROUP_LIST_ROUTE.
+        startDestination = PROFILE_ROUTE
+    ) {
+
+        // =====================================================
+        // Independent Profile Screen
+        // =====================================================
+
+        composable(PROFILE_ROUTE) {
+
+            ProfileRoute(
+
+                onProfileSaved = {
+
+                    // No navigation here.
+                    // The Profile module remains independent.
+                    // Later any screen can decide what happens after save.
+
+                }
+            )
+        }
+
+        // =====================================================
+        // Group List
+        // =====================================================
+
+        composable(GROUP_LIST_ROUTE) {
+
+            GroupListScreen(
+
+                onGroupClick = { id ->
+
+                    navController.navigate("$GROUP_PROFILE_ROUTE/$id")
+
+                }
+
+                // Later you can add:
+                //
+                // onProfileClick = {
+                //     navController.navigate(PROFILE_ROUTE)
+                // }
+            )
+        }
+
+        // =====================================================
+        // Group Profile
+        // =====================================================
+
+        composable(
+            route = "$GROUP_PROFILE_ROUTE/{$GROUP_ID_ARG}",
+            arguments = listOf(
+                navArgument(GROUP_ID_ARG) {
+                    type = NavType.StringType
+                }
+            )
+        ) { back ->
+
+            val groupId =
+                back.arguments?.read {
+                    getString(GROUP_ID_ARG)
+                }.orEmpty()
+
+            GroupProfileScreen(
+                groupId = groupId,
+
+                onBack = {
+                    navController.popBackStack()
+                },
+
+                onMemberClick = { id ->
+                    navController.navigate("$PATIENT_PROFILE_ROUTE/$id")
+                }
+            )
+        }
+
+        // =====================================================
+        // Patient Profile
+        // =====================================================
+
+        composable(
+            route = "$PATIENT_PROFILE_ROUTE/{$PATIENT_ID_ARG}",
+            arguments = listOf(
+                navArgument(PATIENT_ID_ARG) {
+                    type = NavType.StringType
+                }
+            )
+        ) { back ->
+
+            val patientId =
+                back.arguments?.read {
+                    getString(PATIENT_ID_ARG)
+                }.orEmpty()
+
+            PatientProfileScreen(
+
+                patientId = patientId,
+
+                onBack = {
+
+                    navController.popBackStack()
+
+                }
+            )
+        }
     }
-
-    // Screen 2: Household profile (head + members)
-    composable(
-      route = "$GROUP_PROFILE_ROUTE/{$GROUP_ID_ARG}",
-      arguments = listOf(navArgument(GROUP_ID_ARG) { type = NavType.StringType }),
-    ) { back ->
-      val groupId = back.arguments?.read { getString(GROUP_ID_ARG) }.orEmpty()
-      GroupProfileScreen(
-        groupId = groupId,
-        onBack = { navController.popBackStack() },
-        onMemberClick = { id -> navController.navigate("$PATIENT_PROFILE_ROUTE/$id") },
-      )
-    }
-
-    // Screen 3: Patient IPS summary
-    composable(
-      route = "$PATIENT_PROFILE_ROUTE/{$PATIENT_ID_ARG}",
-      arguments = listOf(navArgument(PATIENT_ID_ARG) { type = NavType.StringType }),
-    ) { back ->
-      val patientId = back.arguments?.read { getString(PATIENT_ID_ARG) }.orEmpty()
-      PatientProfileScreen(patientId = patientId, onBack = { navController.popBackStack() })
-    }
-  }
 }
