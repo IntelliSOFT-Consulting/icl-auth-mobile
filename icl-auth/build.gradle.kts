@@ -58,6 +58,10 @@ kotlin {
         implementation(libs.compose.ui)
         implementation(libs.compose.foundation)
         implementation(libs.compose.material3)
+
+        // Material Icons
+
+
         implementation(libs.kotlinx.serialization.json)
         implementation(libs.ktor.client.core)
         implementation(libs.ktor.client.cio)
