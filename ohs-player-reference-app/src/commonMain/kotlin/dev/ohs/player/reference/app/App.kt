@@ -36,6 +36,8 @@ import dev.ohs.player.library.registry.LocalViewRegistry
 import dev.ohs.player.reference.app.feature.group.list.GroupListScreen
 import dev.ohs.player.reference.app.feature.group.profile.GroupProfileScreen
 import dev.ohs.player.reference.app.feature.patient.profile.PatientProfileScreen
+import icl.ohs.libs.auth.IclAuth
+import icl.ohs.libs.auth.IclAuthConfig
 
 private const val PROFILE_ROUTE = "profile"
 private const val GROUP_LIST_ROUTE = "groupList"
