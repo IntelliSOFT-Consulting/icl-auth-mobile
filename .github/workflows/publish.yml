@@ -1,0 +1,44 @@
+name: Publish ICL Auth Library
+
+on:
+  workflow_dispatch:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "11"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run auth checks
+        run: |
+          chmod +x gradlew
+          ./gradlew :icl-auth:jvmTest
+
+      - name: Publish package
+        run: |
+          chmod +x gradlew
+          if [ "${GITHUB_EVENT_NAME}" = "release" ]; then
+            export VERSION_NAME="${GITHUB_REF_NAME#v}"
+          fi
+          ./gradlew :icl-auth:publishAllPublicationsToGitHubPackagesRepository
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

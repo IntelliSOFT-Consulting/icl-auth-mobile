@@ -35,15 +35,9 @@ import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons.Default
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -284,9 +278,7 @@ private fun LoginScreenContent(
                 KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Next),
               trailingIcon = {
                 if (username.isNotEmpty()) {
-                  IconButton(onClick = { onUsernameChange("") }) {
-                    Icon(imageVector = Default.Clear, contentDescription = "Clear username")
-                  }
+                  TextButton(onClick = { onUsernameChange("") }) { Text("Clear") }
                 }
               },
             )
@@ -309,28 +301,16 @@ private fun LoginScreenContent(
                 KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
               keyboardActions = KeyboardActions(onDone = { if (canSubmit) onLoginClick() }),
               trailingIcon = {
-                Row {
+                Row(
+                  horizontalArrangement = Arrangement.spacedBy(4.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                ) {
                   if (password.isNotEmpty()) {
-                    IconButton(onClick = { onPasswordChange("") }) {
-                      Icon(imageVector = Default.Clear, contentDescription = "Clear password")
-                    }
+                    TextButton(onClick = { onPasswordChange("") }) { Text("Clear") }
                   }
 
-                  IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Icon(
-                      imageVector =
-                        if (passwordVisible) {
-                          Default.VisibilityOff
-                        } else {
-                          Default.Visibility
-                        },
-                      contentDescription =
-                        if (passwordVisible) {
-                          "Hide password"
-                        } else {
-                          "Show password"
-                        },
-                    )
+                  TextButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Text(if (passwordVisible) "Hide" else "Show")
                   }
                 }
               },
