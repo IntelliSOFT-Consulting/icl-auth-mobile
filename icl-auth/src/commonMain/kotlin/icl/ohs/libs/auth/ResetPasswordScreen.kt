@@ -152,6 +152,7 @@ fun ResetPasswordScreen(
       }
     },
     onBackToLoginClick = onBackToLoginClick,
+    onErrorDismiss = { errorMessage = null },
   )
 }
 
@@ -164,6 +165,7 @@ private fun ResetPasswordScreenContent(
   onNewPasswordChange: (String) -> Unit,
   onConfirmPasswordChange: (String) -> Unit,
   onSubmitClick: () -> Unit,
+  onErrorDismiss: () -> Unit,
   config: ResetPasswordScreenConfig,
   modifier: Modifier = Modifier,
   errorMessage: String? = null,
@@ -210,6 +212,15 @@ private fun ResetPasswordScreenContent(
           .imePadding(),
       contentAlignment = Alignment.Center,
     ) {
+      if (errorMessage != null) {
+        AuthMessageBanner(
+          message = errorMessage,
+          type = AuthMessageBannerType.Error,
+          onDismiss = onErrorDismiss,
+          modifier =
+            Modifier.align(Alignment.TopCenter).padding(start = 20.dp, top = 12.dp, end = 20.dp),
+        )
+      }
       Column(
         modifier =
           Modifier.widthIn(max = 460.dp)
@@ -321,14 +332,6 @@ private fun ResetPasswordScreenContent(
                     },
                 )
               }
-            }
-
-            if (errorMessage != null) {
-              Text(
-                text = errorMessage,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-              )
             }
 
             Button(

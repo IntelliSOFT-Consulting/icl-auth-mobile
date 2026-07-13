@@ -100,6 +100,15 @@ fun ForgotPasswordScreen(
           .imePadding(),
       contentAlignment = Alignment.Center,
     ) {
+      if (errorMessage != null) {
+        AuthMessageBanner(
+          message = errorMessage!!,
+          type = AuthMessageBannerType.Error,
+          onDismiss = { errorMessage = null },
+          modifier =
+            Modifier.align(Alignment.TopCenter).padding(start = 20.dp, top = 12.dp, end = 20.dp),
+        )
+      }
       Column(
         modifier =
           Modifier.widthIn(max = 460.dp)
@@ -175,14 +184,6 @@ fun ForgotPasswordScreen(
                     }
                   ),
               )
-
-              if (errorMessage != null) {
-                Text(
-                  text = errorMessage!!,
-                  style = MaterialTheme.typography.bodyMedium,
-                  color = MaterialTheme.colorScheme.error,
-                )
-              }
 
               Button(
                 onClick = {

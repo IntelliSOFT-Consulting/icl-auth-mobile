@@ -169,6 +169,7 @@ fun LoginScreen(
 
       onForgotPasswordClick(trimmedUsername)
     },
+    onErrorDismiss = { errorMessage = null },
     onTermsAndConditionsClick = onTermsAndConditionsClick,
     onPrivacyPolicyClick = onPrivacyPolicyClick,
   )
@@ -182,6 +183,7 @@ private fun LoginScreenContent(
   onPasswordChange: (String) -> Unit,
   onLoginClick: () -> Unit,
   onForgotPasswordClick: () -> Unit,
+  onErrorDismiss: () -> Unit,
   onTermsAndConditionsClick: () -> Unit,
   onPrivacyPolicyClick: (() -> Unit)?,
   modifier: Modifier = Modifier,
@@ -222,6 +224,15 @@ private fun LoginScreenContent(
           .imePadding(),
       contentAlignment = Alignment.Center,
     ) {
+      if (errorMessage != null) {
+        AuthMessageBanner(
+          message = errorMessage,
+          type = AuthMessageBannerType.Error,
+          onDismiss = onErrorDismiss,
+          modifier =
+            Modifier.align(Alignment.TopCenter).padding(start = 20.dp, top = 12.dp, end = 20.dp),
+        )
+      }
       Column(
         modifier =
           Modifier.widthIn(max = 460.dp)
@@ -331,14 +342,6 @@ private fun LoginScreenContent(
                   Text("Forgot password?")
                 }
               }
-            }
-
-            if (errorMessage != null) {
-              Text(
-                text = errorMessage,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-              )
             }
 
             Button(
