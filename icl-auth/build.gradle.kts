@@ -58,27 +58,14 @@ kotlin {
   @OptIn(ExperimentalWasmDsl::class) wasmJs { browser() }
 
   sourceSets {
-    commonMain.dependencies {
-      implementation(libs.compose.runtime)
-      implementation(libs.compose.ui)
-      implementation(libs.compose.foundation)
-      implementation(libs.compose.material3)
-      implementation(libs.kotlinx.serialization.json)
-      implementation(libs.ktor.client.core)
-      implementation(libs.ktor.client.cio)
-    }
-
     commonMain {
-      kotlin.setSrcDirs(listOf("src/libraryCommonMain/kotlin"))
+      kotlin.srcDirs("src/commonMain/kotlin", "src/libraryCommonMain/kotlin")
       dependencies {
         implementation(libs.compose.runtime)
         implementation(libs.compose.ui)
         implementation(libs.compose.foundation)
         implementation(libs.compose.material3)
-
-        // Material Icons
-
-
+        implementation(libs.compose.materialIconsCore)
         implementation(libs.kotlinx.serialization.json)
         implementation(libs.ktor.client.core)
         implementation(libs.ktor.client.cio)
@@ -86,16 +73,12 @@ kotlin {
     }
 
     commonTest {
-      kotlin.setSrcDirs(listOf("src/libraryCommonTest/kotlin"))
+      kotlin.srcDirs("src/commonTest/kotlin", "src/libraryCommonTest/kotlin")
       dependencies {
         implementation(libs.kotlin.test)
         implementation(libs.kotlinx.coroutines.test)
         implementation(libs.ktor.client.mock)
       }
-    commonTest.dependencies {
-      implementation(libs.kotlin.test)
-      implementation(libs.kotlinx.coroutines.test)
-      implementation(libs.ktor.client.mock)
     }
   }
 }

@@ -7,15 +7,17 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
 class ProfileViewModel(
-    private val repository: ProfileRepository = ProfileRepository()
+    private val repository: ProfileRepository = ProfileRepository
 ) {
 
-    var uiState by mutableStateOf(ProfileUiState())
+    var uiState by mutableStateOf(repository.getProfile())
         private set
 
     var profileSaved by mutableStateOf(false)
         private set
+        
     var validationMessage by mutableStateOf<String?>(null)
         private set
 
@@ -110,7 +112,6 @@ class ProfileViewModel(
     // ================= SAVE PROFILE =================
 
     fun saveProfile() {
-
         if (
             uiState.firstName.isBlank() ||
             uiState.lastName.isBlank() ||
@@ -119,21 +120,19 @@ class ProfileViewModel(
             uiState.email.isBlank() ||
             uiState.phone.isBlank()
         ) {
-
-            validationMessage =
-                "Please complete your Personal Information and Contact Information before saving."
-
+            validationMessage = "Please complete your Personal Information and Contact Information before saving."
             return
         }
 
         validationMessage = null
-
+        
+        // Save to repository (singleton)
+        repository.saveProfile(uiState)
+        
         profileSaved = true
 
         CoroutineScope(Dispatchers.Main).launch {
-
             delay(3000)
-
             profileSaved = false
         }
     }

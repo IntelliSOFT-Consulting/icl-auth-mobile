@@ -1,12 +1,15 @@
 package dev.ohs.player.auth.profile
 
-class ProfileRepository {
+object ProfileRepository {
+    private var cachedProfile: ProfileUiState? = null
+
+    fun getProfile(): ProfileUiState {
+        return cachedProfile ?: ProfileUiState()
+    }
 
     fun saveProfile(profile: ProfileUiState): Boolean {
-
-        // TODO:
-        // Replace this with the API call.
-
+        cachedProfile = profile
+        // In the future, this will also call an API
         return true
     }
 }
