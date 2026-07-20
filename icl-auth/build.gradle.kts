@@ -24,7 +24,7 @@ plugins {
   alias(libs.plugins.composeCompiler)
   id("maven-publish")
   id("spotless-conventions")
-  signing
+  id("signing")
 }
 
 group = providers.gradleProperty("POM_GROUP_ID").getOrElse("io.github.intellisoft-consulting")
@@ -100,7 +100,7 @@ if (isCi) {
     .configureEach { enabled = false }
 }
 
-publishing {
+configure<PublishingExtension> {
   repositories {
     mavenLocal()
 
@@ -203,7 +203,7 @@ publishing {
   }
 }
 
-signing {
+configure<SigningExtension> {
   val signingKey =
     providers.gradleProperty("SIGNING_KEY").orElse(providers.environmentVariable("SIGNING_KEY"))
   val signingPassword =
@@ -213,6 +213,7 @@ signing {
 
   if (!signingKey.orNull.isNullOrBlank()) {
     useInMemoryPgpKeys(signingKey.get(), signingPassword.orNull)
+    val publishing = extensions.getByType<PublishingExtension>()
     sign(publishing.publications)
   }
 }
