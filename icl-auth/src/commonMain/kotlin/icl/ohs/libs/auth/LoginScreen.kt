@@ -73,11 +73,18 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.ui.tooling.preview.Preview
 
 internal const val LOGIN_USERNAME_TAG = "login_username"
 internal const val LOGIN_PASSWORD_TAG = "login_password"
 internal const val LOGIN_BUTTON_TAG = "login_button"
-
+@Preview(showBackground = true)
+@Composable
+fun LoginScreenPreview() {
+  MaterialTheme {
+    LoginScreen(config = LoginScreenConfig(endpoint= ""), onLoginSuccess = {})
+  }
+}
 @Composable
 fun LoginScreen(
   config: LoginScreenConfig,

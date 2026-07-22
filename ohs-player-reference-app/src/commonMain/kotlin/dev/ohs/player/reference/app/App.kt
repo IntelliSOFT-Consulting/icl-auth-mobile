@@ -69,7 +69,12 @@ private fun ReferenceAppNavigation() {
 
     // Screen 1: Household list
     composable(GROUP_LIST_ROUTE) {
-      GroupListScreen(onGroupClick = { id -> navController.navigate("$GROUP_PROFILE_ROUTE/$id") })
+      GroupListScreen(
+        onProfileClick = {},
+        onSettingsClick = {},
+        onLogoutClick = {  },
+
+        onGroupClick = { id -> navController.navigate("$GROUP_PROFILE_ROUTE/$id") })
     }
 
     // Screen 2: Household profile (head + members)
