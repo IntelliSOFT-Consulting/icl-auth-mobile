@@ -141,6 +141,7 @@ data class ProviderUser(
   val phone: String? = null,
   val email: String? = null,
   val locationInfo: ProviderLocationInfo? = null,
+  val communityHealthUnits: List<String>? = null,
 )
 
 data class ProviderLocationInfo(

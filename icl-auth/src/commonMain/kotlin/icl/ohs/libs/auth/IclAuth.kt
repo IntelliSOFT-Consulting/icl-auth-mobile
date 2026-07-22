@@ -66,6 +66,38 @@ object IclAuth {
   fun currentAuthorizationHeader(now: Instant = Clock.System.now()): String? =
     currentValidSession(now)?.authorizationHeader
 
+  suspend fun refreshProviderProfile(): Result<ProviderProfile?> {
+    val config = configuration ?: return Result.failure(IllegalStateException("Not initialized"))
+    val session = currentSession() ?: return Result.failure(IllegalStateException("No session"))
+    
+    val httpClient = buildLoginHttpClient(config.requestTimeoutMillis)
+    val loginService = LoginService(httpClient)
+    
+    return try {
+        val resolvedLoginConfig = resolveLoginConfig(
+            screenConfig = LoginScreenConfig(endpoint = ""), // Not used for profile fetch
+            authConfig = config
+        )
+        
+        val result = loginService.fetchProviderProfile(
+            config = resolvedLoginConfig,
+            session = session
+        )
+        
+        when (result) {
+            is ProviderProfileRequestResult.Success -> {
+                updateProviderProfile(result.providerProfile)
+                Result.success(result.providerProfile)
+            }
+            is ProviderProfileRequestResult.Failure -> {
+                Result.failure(Exception(result.value.message))
+            }
+        }
+    } finally {
+        httpClient.close()
+    }
+  }
+
   fun currentAuthHeaders(now: Instant = Clock.System.now()): Map<String, String> =
     currentAuthorizationHeader(now)?.let { mapOf("Authorization" to it) }.orEmpty()
 

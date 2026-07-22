@@ -15,13 +15,8 @@
  */
 package dev.ohs.player.reference.app
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -34,12 +29,16 @@ import dev.ohs.player.reference.app.feature.group.profile.GroupProfileScreen
 import dev.ohs.player.reference.app.feature.patient.profile.PatientProfileScreen
 import icl.ohs.libs.auth.IclAuth
 import icl.ohs.libs.auth.IclAuthConfig
+import icl.ohs.libs.auth.profile.ProfileScreen
+import icl.ohs.libs.auth.profile.ProfileViewModel
 
+private const val PROFILE_ROUTE = "profile"
 private const val GROUP_LIST_ROUTE = "groupList"
 private const val GROUP_PROFILE_ROUTE = "groupProfile"
 private const val PATIENT_PROFILE_ROUTE = "patientProfile"
 private const val GROUP_ID_ARG = "groupId"
 private const val PATIENT_ID_ARG = "patientId"
+
 private val AUTH_CONFIG =
   IclAuthConfig(baseAuthUrl = "https://dsrkeycloak.intellisoftkenya.com/auth")
 
@@ -53,7 +52,7 @@ fun App() {
       var isLoggedIn by rememberSaveable { mutableStateOf(IclAuth.hasValidAccessToken()) }
 
       if (isLoggedIn) {
-        ReferenceAppNavigation()
+        ReferenceAppNavigation(onLogout = { isLoggedIn = false })
       } else {
         AuthNavigation(onAuthenticated = { isLoggedIn = true })
       }
@@ -62,22 +61,31 @@ fun App() {
 }
 
 @Composable
-private fun ReferenceAppNavigation() {
+private fun ReferenceAppNavigation(onLogout: () -> Unit) {
   val navController = rememberNavController()
 
   NavHost(navController = navController, startDestination = GROUP_LIST_ROUTE) {
 
-    // Screen 1: Household list
-    composable(GROUP_LIST_ROUTE) {
-      GroupListScreen(
-        onProfileClick = {},
-        onSettingsClick = {},
-        onLogoutClick = {  },
-
-        onGroupClick = { id -> navController.navigate("$GROUP_PROFILE_ROUTE/$id") })
+    // New Profile Screen
+    composable(PROFILE_ROUTE) {
+      val viewModel = remember { ProfileViewModel() }
+      ProfileScreen(
+        viewModel = viewModel,
+        onBack = { navController.popBackStack() }
+      )
     }
 
-    // Screen 2: Household profile (head + members)
+    // Household list
+    composable(GROUP_LIST_ROUTE) {
+      GroupListScreen(
+        onProfileClick = { navController.navigate(PROFILE_ROUTE) },
+        onSettingsClick = { /* Handle settings */ },
+        onLogoutClick = { onLogout() },
+        onGroupClick = { id -> navController.navigate("$GROUP_PROFILE_ROUTE/$id") }
+      )
+    }
+
+    // Household profile (head + members)
     composable(
       route = "$GROUP_PROFILE_ROUTE/{$GROUP_ID_ARG}",
       arguments = listOf(navArgument(GROUP_ID_ARG) { type = NavType.StringType }),
@@ -90,7 +98,7 @@ private fun ReferenceAppNavigation() {
       )
     }
 
-    // Screen 3: Patient IPS summary
+    // Patient IPS summary
     composable(
       route = "$PATIENT_PROFILE_ROUTE/{$PATIENT_ID_ARG}",
       arguments = listOf(navArgument(PATIENT_ID_ARG) { type = NavType.StringType }),
