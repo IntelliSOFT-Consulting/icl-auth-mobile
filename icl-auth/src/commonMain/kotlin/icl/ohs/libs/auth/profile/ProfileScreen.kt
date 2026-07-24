@@ -7,7 +7,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,7 +46,7 @@ fun ProfileScreen(
                 title = { Text("Profile", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -135,7 +139,11 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     HorizontalDivider(color = Color.DarkGray, thickness = 0.5.dp)
                     Spacer(modifier = Modifier.height(12.dp))
-                    DetailRow(icon = Icons.Default.Email, label = "Email Address", value = uiState.email)
+                    DetailRow(
+                        icon = Icons.Default.Email,
+                        label = "Email Address",
+                        value = uiState.email
+                    )
                 }
             }
 
@@ -158,7 +166,10 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     LocationField(label = "Sub-county", value = uiState.locationInfo.subCountyName)
                     Spacer(modifier = Modifier.height(16.dp))
-                    
+                    LocationField(label = "Ward", value = uiState.locationInfo.wardName)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    LocationField(label = "Facility", value = uiState.locationInfo.facilityName)
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(text = "Community Health Unit(s) (CHUs)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     Spacer(modifier = Modifier.height(12.dp))
                     uiState.communityHealthUnits.forEachIndexed { index, unit ->
