@@ -37,6 +37,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -293,7 +294,7 @@ internal class LoginService(val httpClient: HttpClient) {
   }
 }
 
-private suspend fun LoginService.fetchProviderProfile(
+internal suspend fun LoginService.fetchProviderProfile(
   config: ResolvedLoginConfig,
   session: AuthSession?,
 ): ProviderProfileRequestResult {
@@ -558,7 +559,10 @@ internal fun JsonObject.toProviderUser(): ProviderUser =
     phone = rawStringValue("phone"),
     email = rawStringValue("email"),
     locationInfo = objectValue("locationInfo")?.toProviderLocationInfo(),
+    communityHealthUnits = arrayValue("communityHealthUnits")?.mapNotNull { it.jsonPrimitive.contentOrNull },
   )
+
+internal fun JsonObject.arrayValue(key: String) = this[key]?.jsonArray
 
 internal fun JsonObject.toProviderLocationInfo(): ProviderLocationInfo =
   ProviderLocationInfo(
