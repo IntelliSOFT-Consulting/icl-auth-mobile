@@ -7,7 +7,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import icl.ohs.libs.auth.AuthMessageBanner
+import icl.ohs.libs.auth.AuthMessageBannerType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,13 +33,20 @@ fun ProfileScreen(
     val uiState = viewModel.uiState
     val scrollState = rememberScrollState()
 
+    // The ViewModel's refresh() runs on its own CoroutineScope; make sure it's
+    // cancelled once this screen leaves composition instead of leaking.
+    DisposableEffect(viewModel) {
+        onDispose { viewModel.clear() }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Profile", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -126,7 +139,11 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     HorizontalDivider(color = Color.DarkGray, thickness = 0.5.dp)
                     Spacer(modifier = Modifier.height(12.dp))
-                    DetailRow(icon = Icons.Default.Email, label = "Email Address", value = uiState.email)
+                    DetailRow(
+                        icon = Icons.Default.Email,
+                        label = "Email Address",
+                        value = uiState.email
+                    )
                 }
             }
 
@@ -162,6 +179,18 @@ fun ProfileScreen(
             }
             
             Spacer(modifier = Modifier.height(40.dp))
+        }
+    }
+
+        if (viewModel.errorMessage != null) {
+            AuthMessageBanner(
+                message = viewModel.errorMessage.orEmpty(),
+                type = AuthMessageBannerType.Error,
+                onDismiss = { viewModel.dismissError() },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(start = 20.dp, top = 12.dp, end = 20.dp),
+            )
         }
     }
 }
