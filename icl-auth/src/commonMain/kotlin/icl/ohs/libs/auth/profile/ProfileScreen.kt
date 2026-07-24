@@ -158,7 +158,9 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     LocationField(label = "Sub-county", value = uiState.locationInfo.subCountyName)
                     Spacer(modifier = Modifier.height(16.dp))
-                    
+                    LocationField(label = "Ward", value = uiState.locationInfo.wardName)
+                    Spacer(modifier = Modifier.height(16.dp))
+
                     Text(text = "Community Health Unit(s) (CHUs)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     Spacer(modifier = Modifier.height(12.dp))
                     uiState.communityHealthUnits.forEachIndexed { index, unit ->
