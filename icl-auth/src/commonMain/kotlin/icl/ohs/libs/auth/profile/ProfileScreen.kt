@@ -17,6 +17,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import icl.ohs.libs.auth.AuthMessageBanner
+import icl.ohs.libs.auth.AuthMessageBannerType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,6 +29,13 @@ fun ProfileScreen(
     val uiState = viewModel.uiState
     val scrollState = rememberScrollState()
 
+    // The ViewModel's refresh() runs on its own CoroutineScope; make sure it's
+    // cancelled once this screen leaves composition instead of leaking.
+    DisposableEffect(viewModel) {
+        onDispose { viewModel.clear() }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -159,6 +168,18 @@ fun ProfileScreen(
             }
             
             Spacer(modifier = Modifier.height(40.dp))
+        }
+    }
+
+        if (viewModel.errorMessage != null) {
+            AuthMessageBanner(
+                message = viewModel.errorMessage.orEmpty(),
+                type = AuthMessageBannerType.Error,
+                onDismiss = { viewModel.dismissError() },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(start = 20.dp, top = 12.dp, end = 20.dp),
+            )
         }
     }
 }
